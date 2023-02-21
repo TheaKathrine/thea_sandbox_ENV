@@ -1,0 +1,21 @@
+#####################################################################################
+#   I denne fil indsættes alle variable som ikke                                    #
+#   kan angives i tfvars, med <env_def>.                                            #
+#   Alle vaiable skal prefixes med miljø, <t> (test), <d> (dev) eller <p> (prod).   #
+#                                                                                   #
+#   Eksempel på brug:                                                               #
+#                                                                                   #
+#   <<prefix>><variable name> = <value>                                             #
+#   <d>storage_account_name = cimtdstg01                                            #
+#                                                                                   #
+##################################################################################### 
+
+## Subscription
+<t>subscription_id="64c7e3de-eb49-4deb-9952-979724c9dba2t"
+<d>subscription_id="64c7e3de-eb49-4deb-9952-979724c9dba2d"
+<p>subscription_id="64c7e3de-eb49-4deb-9952-979724c9dba2p"
+
+## Container Registry SKU
+<t>acrsku = "Basic"
+<d>acrsku = "Standard"
+<p>acrsku = "Premium"

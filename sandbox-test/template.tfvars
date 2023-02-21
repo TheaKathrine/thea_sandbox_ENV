@@ -1,0 +1,5 @@
+tenant_id = "421c9c18-32c7-4250-84e0-c1626f963b1f"
+rgname = "CIMT-<env_def>-TemplateTest-rg"
+stgname = "cimt<env_def>templateteststg"
+acrname = "cimt<env_def>templatetestacr"
+stgmodname = "cimt<env_def>tempmodteststg"
