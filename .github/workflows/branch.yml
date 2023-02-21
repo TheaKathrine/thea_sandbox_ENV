@@ -1,0 +1,29 @@
+name: Branch testing workflow
+
+on:
+  push:
+    branches:
+       [ping, main, pong ]
+
+
+
+jobs:
+  test:
+    if: ${{ github.ref_name == 'ping' }}
+    uses: ./.github/workflows/called.yml
+    with:
+      Input_Env: "t"
+    secrets: inherit
+
+  production:
+    if: ${{ github.ref_name == 'main' }}
+    uses: ./.github/workflows/called.yml
+    with:
+      Input_Env: "p"
+    secrets: inherit
+
+
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "BRANCH X${{ github.ref_name }}Y"

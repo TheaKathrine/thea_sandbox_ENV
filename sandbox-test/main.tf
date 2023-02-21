@@ -12,3 +12,11 @@ terraform {
 provider "azurerm" {
   features {}
 }
+
+resource "azurerm_resource_group" "resourcegroup-rg" {
+  name     = "theasTest-rg"
+  location = "West Europe"
+  tags = {
+    source = "Terraform"
+  }
+}

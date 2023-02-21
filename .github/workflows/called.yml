@@ -1,36 +1,154 @@
 # This is a basic workflow to help you get started with Actions
 
-name: CI
+name: Workflow-test
 
 # Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the "master" branch
-  push:
-    branches: [ "master" ]
-  pull_request:
-    branches: [ "master" ]
+  workflow_call:
+    inputs:
+      Input_Env:
+        required: true
+        type: string
 
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
+
+env:
+  TF_LOG: INFO
+  STATE_ACCESS_KEY: ${{ secrets.STATE_ACCESS_KEY }}
+
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
-  build:
-    # The type of runner that the job will run on
+  terraform:
+    name: 'Terraform'
     runs-on: ubuntu-latest
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
+
+
+    # Use the Bash shell regardless whether the GitHub Actions runner is ubuntu-latest, macos-latest, or windows-latest
+    # Set the working directory to main for the config files
+    defaults:
+      run:
+        shell: bash
+
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v3
+    # Checkout the repository to the GitHub Actions runner
 
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
 
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
+    - name: Make table for secret-name
+      id: CreateTable
+      #run: echo theastable="${declare -A secretsTable=(['d']="DEV" ['p']="PROD")}" >> $GITHUB_OUTPUT
+      run: declare -A secretsTable=([d]=DEV [p]=PROD [t]=TEST); echo "Environment=${secretsTable[${{ inputs.Input_Env }}]}" >> $GITHUB_OUTPUT
+
+    - run: echo ${{ steps.CreateTable.outputs.Environment }}
+
+    outputs:
+       TARGET_ENV: ${{ steps.CreateTable.outputs.Environment }}
+
+
+  Environment:
+    needs: Terraform
+    runs-on: ubuntu-latest
+    environment: ${{ needs.terraform.outputs.TARGET_ENV }}
+
+
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      # - name: debug22
+      #   env:
+      #     VARNAME: ${{ format('AZURE_CREDENTIALS_{0}', needs.terraform.outputs.TARGET_ENV) }}
+      #   run: echo ${{ secrets.AZURE_CREDENTIALS_PROD }}
+
+      # - name: DEBUG123
+      #   run: echo ${{ vars.THEASTEST }}
+
+      # - name: myjob
+      #   env:
+      #     MY_SECRET: ${{ secrets.AZURE_CREDENTIALS_PROD }}
+      #   if: env.MY_SECRET != null
+      #   run: echo "CREDENTIALS OK"
+
+      # - name: debug3
+      #   run: echo ${{ secrets.AZURE_CREDENTIALS_${{ steps.CreateTable.outputs.Environment}} }}
+
+      - name: PWD command
+        run: pwd
+
+      - name: LS command
+        run: ls -l
+
+
+      - name: Azure Login
+        # env:
+        #   VARNAME: ${{ format('AZURE_CREDENTIALS_{0}', needs.terraform.outputs.TARGET_ENV) }}
+        uses: azure/login@v1.4.3
+        with:
+          creds: ${{ secrets[format('AZURE_CREDENTIALS_{0}', needs.terraform.outputs.TARGET_ENV)] }}
+          allow-no-subscriptions: true
+
+      - name: tfvars gen
+        run: ./createtfvars.sh ${{ inputs.Input_Env }}
+
+
+      - name: get_Deployment_SP_secret
+        id: DeploymentSecret
+        uses: Azure/get-keyvault-secrets@v1
+        with:
+          keyvault: "dap-${{ inputs.Input_Env }}-tf-state-kv"
+          secrets: 'dap-${{ inputs.Input_Env }}-deploy-sp'
+
+    # - name: test
+    #   run : |
+    #     echo ${"dap-${Input_Env}-tf-state-kv"}
+
+
+      # - name: Get deployment Service Principal JSON object
+      #   env:
+      #   #Json file from above, get by id and variable name
+      #     SP_JSON_OBJECT: ${{ steps.DeploymentSecret.outputs.dap-${{ inputs.Input_Env }}-deploy-sp }}
+      # #Look through file and save properties to github env variables
+      #   run: |
+      #     echo "ARM_TENANT_ID=$(echo $SP_JSON_OBJECT | jq -r '.tenantId')" >> $GITHUB_ENV
+      #                "${{ steps.DeploymentSecret.outputs[format('dap-{0}-deploy-sp', inputs.Input_Env)] }}" >> $GITHUB_OUTPUT
+      #     echo "ARM_SUBSCRIPTION_ID=$(echo $SP_JSON_OBJECT | jq -r '.subscriptionId')" >> $GITHUB_ENV
+      #     echo "ARM_CLIENT_ID=$(echo $SP_JSON_OBJECT | jq -r '.clientId')" >> $GITHUB_ENV
+      #     echo "ARM_CLIENT_SECRET=$(echo $SP_JSON_OBJECT | jq -r '.clientSecret')" >> $GITHUB_ENV
+
+
+      - name: Get deployment Service Principal JSON object
+        id: GetKeyvaultSecret
+        env:
+        #Json file from above, get by id and variable name
+          SP_JSON_OBJECT: ${{ steps.DeploymentSecret.outputs[format('dap-{0}-deploy-sp', inputs.Input_Env)] }}
+      #Look through file and save properties to github env variables
         run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+          SP_JSON_OBJECT=$(az keyvault secret show --name dap-${{ inputs.Input_Env }}-deploy-sp --vault-name dap-${{ inputs.Input_Env }}-tf-state-kv --query 'value' -o tsv)
+          echo "::add-mask::$SP_JSON_OBJECT"
+          echo "SP_JSON_OBJECT=$(echo $SP_JSON_OBJECT)" >> $GITHUB_OUTPUT
+
+          echo "ARM_TENANT_ID=$(echo $SP_JSON_OBJECT | jq -r '.tenantId')" >> $GITHUB_ENV
+          echo "ARM_SUBSCRIPTION_ID=$(echo $SP_JSON_OBJECT | jq -r '.subscriptionId')" >> $GITHUB_ENV
+          echo "ARM_CLIENT_ID=$(echo $SP_JSON_OBJECT | jq -r '.clientId')" >> $GITHUB_ENV
+          echo "ARM_CLIENT_SECRET=$(echo $SP_JSON_OBJECT | jq -r '.clientSecret')" >> $GITHUB_ENV
+
+  # Azure login as Deployment Service Principal4
+      - name: ConnectToAzureWithDeploymentCreds
+        uses: Azure/login@v1
+        with:
+        #Login with properties Json file, formatted in Json instead of env
+          creds: ${{ steps.GetKeyvaultSecret.outputs.SP_JSON_OBJECT}}
+          allow-no-subscriptions: true
+
+      - run: cat ~/.azure/msal_token_cache.json
+
+
+      - name: Terraform Init
+        id: init
+        run: terraform init -backend-config="access_key=5gSN8XsvU+UecvKxfHIWWGH5pWCoDGUPwdsFtM2UbY2YQYdXVKDv1YFJOarVhw3Q5n79O8Emk1E0TUk3nhEF/g=="
+
+
+      - name: terraform apply
+        id: apply
+        run: terraform plan #apply -auto-approve
